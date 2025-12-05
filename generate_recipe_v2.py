@@ -108,8 +108,8 @@ def find_smart_recipe(target_lab):
         bounds=[(0, 1)] * num_pigments,
         args=(target_lab,),
         strategy='best1bin',
-        maxiter=80,    # Hızlı olsun
-        popsize=4,
+        maxiter=120,    # Hızlı olsun
+        popsize=6,
         tol=0.1,
         workers=1,
         disp=False
@@ -127,8 +127,8 @@ def find_smart_recipe(target_lab):
         bounds=[(0, 1)] * len(top_20_indices),
         args=(top_20_indices, num_pigments, target_lab),
         strategy='best1bin',
-        maxiter=100,
-        popsize=6,
+        maxiter=200,
+        popsize=8,
         tol=0.05,
         workers=1,
         disp=False
@@ -152,8 +152,8 @@ def find_smart_recipe(target_lab):
         bounds=[(0, 1)] * len(top_7_indices),
         args=(top_7_indices, num_pigments, target_lab),
         strategy='best1bin',
-        maxiter=200,   # İyice otursun
-        popsize=10,
+        maxiter=400,   # İyice otursun
+        popsize=12,
         tol=0.01,
         workers=1,
         disp=True
@@ -174,14 +174,14 @@ def find_smart_recipe(target_lab):
     return final_recipe
 
 if __name__ == "__main__":
-    df_test = pd.read_csv("RS400_Clean.csv", sep=None, engine='python')
+    df_test = pd.read_csv("eval_dataset_clean.csv", sep=None, engine='python')
     for c in TARGET_COLS + INPUT_COLS:
         if df_test[c].dtype == object:
             df_test[c] = pd.to_numeric(df_test[c].str.replace(',', '.'), errors='coerce')
     df_test = df_test.fillna(0.0)
 
     # Aynı örnek (20)
-    sample_idx = 20
+    sample_idx = 30
     print(f"📌 Örnek No: {sample_idx}")
     
     real_target = df_test[TARGET_COLS].iloc[sample_idx].values.astype(np.float32)
