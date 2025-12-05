@@ -1,0 +1,14 @@
+renkenv311
+renkenv310
+ESKI
+__pycache__
+api copy
+APP
+renkenv310/
+__pycache__/
+*.pyc
+.vscode/
+.env
+.DS_Store
+renkenv311/
+.APP
