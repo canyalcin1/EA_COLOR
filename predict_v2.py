@@ -4,7 +4,7 @@ import numpy as np
 from train import PigmentColorNet, Config
 
 # --- AYARLAR ---
-MODEL_PATH = "pigment_model_bundle.pt"
+MODEL_PATH = "3DeltaEModel.pt"
 INPUT_CSV = "eval_dataset_clean.csv"    
 OUTPUT_CSV = "comparison_results_with_deltaE.csv"   # Dosya adı güncellendi
 

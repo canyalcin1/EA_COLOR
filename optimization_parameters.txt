@@ -1,0 +1,41 @@
+##########################################
+Optimizasyon sonucu Çıkanlar f(x) = 3.9 diff evo
+    EMBED_DIM = 43      # Artırıldı (Eski: 24)
+    HIDDEN_DIM = 236    # Artırıldı (Eski: 128)
+    DROPOUT = 0.0       # Kaldırıldı! (Model tam kapasite çalışacak)
+    LR = 0.0035         # İnce ayar yapıldı
+    BATCH_SIZE = 128    # 124 yerine standart 128 yapıldı
+
+    # Eğitim Ayarları (Uzun soluklu eğitim)
+    EPOCHS = 3000       
+    PATIENCE = 400      # Sabrı biraz artırdık
+
+
+##########################################
+Optimizasyon sonucu Çıkanlar f(x) = 3.77 diff evo
+    EMBED_DIM = 23      
+    HIDDEN_DIM = 256    
+    DROPOUT = 0.0       # Model "fren yapma, tam gaz git" dedi.
+    LR = 0.0031         # 0.00308 yuvarlandı
+    BATCH_SIZE = 112    # 111 buldu, 16'nın katı olsun diye 112 yaptık (GPU sever)
+    
+    # Master Eğitim Ayarları
+    EPOCHS = 3000       # Artık uzun uzun eğitebiliriz
+    PATIENCE = 400      # Sabrı artırdık
+
+
+
+
+
+##########################################
+DeltaE 3.08 Veren Parametreler
+    # Model Hiperparametreleri
+    EMBED_DIM = 24    # Pigmentlerin "Kimyasal Karakter" vektör boyutu
+    HIDDEN_DIM = 128  # Karışım motorunun nöron sayısı
+    DROPOUT = 0.05    # Overfitting engelleyici
+    
+    # Eğitim Ayarları
+    LR = 1e-3         # Öğrenme hızı
+    EPOCHS = 3000     # Toplam tur sayısı
+    BATCH_SIZE = 64   # Her adımda işlenen veri sayısı
+    PATIENCE = 300    # Erken durdurma sabrı

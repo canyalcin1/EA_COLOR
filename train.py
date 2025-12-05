@@ -232,7 +232,7 @@ def main():
                     'input_cols': Config.INPUT_COLS,
                     'target_cols': Config.TARGET_COLS
                 }
-            torch.save(checkpoint, "pigment_model_bundle.pt")
+            torch.save(checkpoint, "pigment_model_bundle_opt37.pt")
 
             best_msg = "💾 (New Best)"
         else:
@@ -251,7 +251,7 @@ def main():
     
     # --- SON TEST ---
     # Kaydedilen en iyi modeli geri yükle
-    model.load_state_dict(torch.load("pigment_model_bundle.pt", weights_only=True))
+    model.load_state_dict(torch.load("pigment_model_bundle_opt37.pt", weights_only=False))
     model.eval()
     
     # Örnek Bir Tahmin Göster (İlk Validation Verisi)
