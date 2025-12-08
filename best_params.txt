@@ -1,0 +1,1 @@
+{'embed_dim': 92, 'n_layers': 2, 'hidden_dim': 511, 'dropout': 0.11645725672669616, 'batchnorm': False, 'lr': 0.0010234918879774443, 'batch_size': 32}

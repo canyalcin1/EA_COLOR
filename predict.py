@@ -4,9 +4,9 @@ import numpy as np
 from train import PigmentColorNet, Config
 
 # --- AYARLAR ---
-MODEL_PATH = "3DeltaEModel.pt"
-INPUT_CSV = "eval_dataset_clean.csv"    
-OUTPUT_CSV = "comparison_results_with_deltaE.csv"   # Dosya adı güncellendi
+MODEL_PATH = "model.pt"
+INPUT_CSV = "eval_dataset_clean.csv"   #"eval_dataset_clean.csv"     
+OUTPUT_CSV = "out.csv"   # Dosya adı güncellendi
 
 def calculate_delta_e_matrix(y_true, y_pred):
     """

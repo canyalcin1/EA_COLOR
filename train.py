@@ -12,23 +12,22 @@ class Config:
     CSV_PATH = "RS400_Clean.csv"
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     
-    # Model Hiperparametreleri
-    EMBED_DIM = 24    # Pigmentlerin "Kimyasal Karakter" vektör boyutu
-    HIDDEN_DIM = 128  # Karışım motorunun nöron sayısı
-    DROPOUT = 0.05    # Overfitting engelleyici
+    # Model Hiperparametreleri (KAPASİTE ARTIRIMI)
+    EMBED_DIM = 64     # Genişletildi (24 -> 64)
+    HIDDEN_DIM = 512   # Genişletildi (128 -> 512)
+    DROPOUT = 0.0      # SIFIRLANDI (Ezberlemeye izin veriyoruz)
     
     # Eğitim Ayarları
-    LR = 1e-3         # Öğrenme hızı
-    EPOCHS = 3000     # Toplam tur sayısı
-    BATCH_SIZE = 64   # Her adımda işlenen veri sayısı
-    PATIENCE = 300    # Erken durdurma sabrı
+    LR = 2e-3         # Hızlandırıldı (1e-3 -> 2e-3)
+    EPOCHS = 5000     # Uzatıldı
+    BATCH_SIZE = 64   
+    PATIENCE = 500    # Sabır artırıldı
 
-    # HEDEFLER (5 Açı x 3 Değer = 15 Çıkış)
+    # HEDEFLER
     ANGLES = ['15', '25', '45', '75', '110']
     TARGET_COLS = [f"{ang}{ch}" for ang in ANGLES for ch in ['L', 'a', 'b']]
 
-    # GİRİŞLER (Pigmentler) - CSV Header'dan alınmıştır
- 
+    # GİRİŞLER
     INPUT_COLS = [
         "726C", "718Y", "783S", "772S", "755C", "744S", "717C", "980", "910", "135", 
         "828", "835", "831", "826", "836", "838", "815", "856", "892", "895", "855", 
@@ -38,50 +37,44 @@ class Config:
         "960", "580", "670", "632", "110", "821", "190"
     ]
 
-# --- 2. VERİ HAZIRLIĞI ---
+# --- 2. VERİ HAZIRLIĞI (TEKİLLEŞTİRME EKLENDİ) ---
 def load_and_prep_data():
     print(f"📂 Veri Yükleniyor: {Config.CSV_PATH}")
-    
-    # 1. Önce dosyayı düz okuyalım (Ayırıcıyı otomatik algılasın)
-    # Motoru 'python' yapıyoruz ki daha esnek olsun.
     df = pd.read_csv(Config.CSV_PATH, sep=None, engine='python')
 
-    # 2. VİRGÜL / NOKTA TEMİZLİĞİ (Hem pigmentler hem hedefler için)
-    # Tüm sayısal olması gereken sütunları geziyoruz
+    # Sayısal Temizlik
     cols_to_fix = Config.INPUT_COLS + Config.TARGET_COLS
-    
     for col in cols_to_fix:
-        if col in df.columns:
-            # Eğer sütun string (object) tipindeyse temizlik yap
-            if df[col].dtype == object:
-                # Virgülleri noktaya çevir
-                df[col] = df[col].str.replace(',', '.', regex=False)
-                # Sayıya çevir, hata verenleri (boşluk vs.) NaN yap
-                df[col] = pd.to_numeric(df[col], errors='coerce')
+        if col in df.columns and df[col].dtype == object:
+            df[col] = df[col].str.replace(',', '.', regex=False)
+            df[col] = pd.to_numeric(df[col], errors='coerce')
 
-    # 3. Eksik Verileri Doldur
     df[Config.INPUT_COLS] = df[Config.INPUT_COLS].fillna(0.0)
     df = df.dropna(subset=Config.TARGET_COLS).reset_index(drop=True)
 
-    # 4. KONTROL NOKTASI (Burası hatayı gösterecek)
-    print("-" * 30)
-    print("🔎 VERİ KONTROLÜ:")
-    print(f"Toplam Satır Sayısı: {len(df)}")
+    # --- YENİ: VERİ TEKİLLEŞTİRME (Çakışmaları Ortalamaya Çevir) ---
+    print("🧹 Veri Tekilleştiriliyor (Gürültü Gideriliyor)...")
+    initial_len = len(df)
     
-    # Pigmentlerin toplamı 0 olan satır var mı?
-    X_temp = df[Config.INPUT_COLS].values
-    zero_rows = (X_temp.sum(axis=1) == 0).sum()
-    print(f"Pigment Toplamı 0 olan satır sayısı: {zero_rows}")
-    if zero_rows > 0:
-        print("⚠️ UYARI: Bazı satırlarda hiç pigment okunamadı! CSV formatı bozuk.")
-    else:
-        print("✅ Tüm satırlarda pigment verisi okundu.")
+    # Pigment reçetesini string'e çevirip gruplayacağız (Hassasiyet: virgülden sonra 4)
+    # Bu yöntem pandas groupby ile kayan nokta hatalarını önler
+    df['signature'] = df[Config.INPUT_COLS].apply(
+        lambda row: '_'.join(row.values.round(4).astype(str)), axis=1
+    )
+    
+    # Grupla ve Ortalamasını Al
+    # numeric_only=True ile sadece sayısal sütunları (Inputs + Targets) ortalar
+    df_grouped = df.groupby('signature', as_index=False).mean(numeric_only=True)
+    
+    # Signature sütununu temizle
+    if 'signature' in df_grouped.columns:
+        df_grouped = df_grouped.drop(columns=['signature'])
         
-    # Örnek bir L değeri (Target) kontrolü
-    print(f"Örnek 15L Değeri (İlk Satır): {df[Config.TARGET_COLS[0]].iloc[0]}")
-    print("-" * 30)
+    print(f"📉 Satır Sayısı: {initial_len} -> {len(df_grouped)} (Birleştirilen: {initial_len - len(df_grouped)})")
+    df = df_grouped
+    # -------------------------------------------------------------
 
-    # 5. ROW NORMALIZATION
+    # Normalizasyon
     X_raw = df[Config.INPUT_COLS].values.astype(np.float32)
     row_sums = X_raw.sum(axis=1, keepdims=True)
     row_sums[row_sums == 0] = 1.0 
@@ -89,94 +82,94 @@ def load_and_prep_data():
 
     y = df[Config.TARGET_COLS].values.astype(np.float32)
 
-    # 6. Scaler
+    # Scaler
     y_scaler = StandardScaler()
     y_scaled = y_scaler.fit_transform(y)
 
     return X, y_scaled, y_scaler
 
-
-# --- 3. MODEL MİMARİSİ (NESTED LEARNING / DEEP SETS) ---
+# --- 3. GÜÇLENDİRİLMİŞ DERİN MODEL (DEEP + BATCHNORM) ---
 class PigmentColorNet(nn.Module):
     def __init__(self, num_pigments, out_dim):
         super().__init__()
         
-        # KATMAN 1: Embedding (Representation Learning)
-        # Giriş [Batch, 60] -> Çıkış [Batch, EMBED_DIM]
-        # Bias=False çünkü 0 pigmentin etkisi 0 olmalı.
-        # Bu katman aslında şu işlemi yapar: Karışımdaki her pigmentin "kimlik vektörünü" 
-        # oranıyla çarpıp toplar. (Weighted Sum of Embeddings)
+        # Giriş Genişletme
         self.pigment_embedding = nn.Linear(num_pigments, Config.EMBED_DIM, bias=False)
         
-        # KATMAN 2: Regressor (Non-Linear Physics Mapping)
-        # Kimyasal özeti alıp renge dönüştüren fizik motoru.
-        self.regressor = nn.Sequential(
+        # Derin Fizik Motoru (4 Katman + BatchNorm)
+        # BatchNorm öğrenmeyi çok hızlandırır ve derin ağları eğitilebilir kılar.
+        self.net = nn.Sequential(
+            # Katman 1
             nn.Linear(Config.EMBED_DIM, Config.HIDDEN_DIM),
-            nn.SiLU(), # Swish aktivasyonu (ReLU'dan daha yumuşak)
-            nn.Dropout(Config.DROPOUT),
-            
-            nn.Linear(Config.HIDDEN_DIM, Config.HIDDEN_DIM),
+            nn.BatchNorm1d(Config.HIDDEN_DIM),
             nn.SiLU(),
-            nn.Dropout(Config.DROPOUT),
             
+            # Katman 2
+            nn.Linear(Config.HIDDEN_DIM, Config.HIDDEN_DIM),
+            nn.BatchNorm1d(Config.HIDDEN_DIM),
+            nn.SiLU(),
+            
+            # Katman 3
+            nn.Linear(Config.HIDDEN_DIM, Config.HIDDEN_DIM),
+            nn.BatchNorm1d(Config.HIDDEN_DIM),
+            nn.SiLU(),
+            
+            # Katman 4
+            nn.Linear(Config.HIDDEN_DIM, Config.HIDDEN_DIM),
+            nn.BatchNorm1d(Config.HIDDEN_DIM),
+            nn.SiLU(),
+            
+            # Çıkış
             nn.Linear(Config.HIDDEN_DIM, out_dim)
         )
         
     def forward(self, x):
-        # x: [Batch, 60] (Normalize edilmiş oranlar)
-        embedding_mix = self.pigment_embedding(x) 
-        output = self.regressor(embedding_mix)
-        return output
+        emb = self.pigment_embedding(x)
+        out = self.net(emb)
+        return out
 
-# --- 4. YARDIMCI: DELTA E HESAPLAMA ---
+# --- 4. YARDIMCI: DELTA E ---
 def calculate_delta_e_mean(y_true, y_pred):
-    # y_true ve y_pred shape: [Batch, 15] -> (5 açı x 3 kanal)
-    # Her 3'lü grubu (L,a,b) ayırıp öklid mesafesi alacağız.
     batch_size = y_true.shape[0]
-    total_de = 0
-    
-    # Veriyi [Batch, 5, 3] formatına çevir (5 Açı, 3 Kanal)
     y_t_reshaped = y_true.reshape(batch_size, 5, 3)
     y_p_reshaped = y_pred.reshape(batch_size, 5, 3)
-    
-    # Delta E = sqrt(dL^2 + da^2 + db^2)
     diff = y_t_reshaped - y_p_reshaped
-    delta_e_per_angle = np.sqrt(np.sum(diff**2, axis=2)) # [Batch, 5]
-    
-    return np.mean(delta_e_per_angle) # Tüm açıların ve batch'in ortalaması
+    delta_e_per_angle = np.sqrt(np.sum(diff**2, axis=2))
+    return np.mean(delta_e_per_angle)
 
-# --- 5. EĞİTİM DÖNGÜSÜ ---
+# --- 5. EĞİTİM ---
 def main():
-    # Cihaz Ayarı
     device = torch.device(Config.DEVICE)
-    print(f"🚀 Sistem Başlatılıyor... Cihaz: {device}")
+    print(f"🚀 AGRESİF EĞİTİM BAŞLIYOR... Cihaz: {device}")
 
-    # Veriyi Hazırla
     X, y, y_scaler = load_and_prep_data()
     
-    # Train/Val Split (%15 Validation)
-    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.15, random_state=42)
+    # %10 Validation (Veri az olduğu için train'e daha çok verelim)
+    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.10, random_state=42)
     
-    # Tensorlara Çevir
     train_ds = TensorDataset(torch.tensor(X_train), torch.tensor(y_train))
     val_ds = TensorDataset(torch.tensor(X_val), torch.tensor(y_val))
     
     train_loader = DataLoader(train_ds, batch_size=Config.BATCH_SIZE, shuffle=True)
     val_loader = DataLoader(val_ds, batch_size=Config.BATCH_SIZE, shuffle=False)
     
-    # Model Kurulumu
-    model = PigmentColorNet(num_pigments=X.shape[1], out_dim=y.shape[1]).to(device)
-    optimizer = optim.AdamW(model.parameters(), lr=Config.LR, weight_decay=1e-4)
-    criterion = nn.HuberLoss() # Outlier'lara karşı MSE'den daha dayanıklı
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=50)
-
-    print(f"🧠 Eğitim Başladı ({Config.EPOCHS} Epoch)...")
+    model = PigmentColorNet(X.shape[1], y.shape[1]).to(device)
     
-    best_val_loss = float('inf')
+    # OPTIMIZER: Weight Decay = 0 (Fren yok)
+    optimizer = optim.AdamW(model.parameters(), lr=Config.LR, weight_decay=0.0)
+    
+    # LOSS: MSELoss (Huber'e göre daha sert, hataları affetmez)
+    criterion = nn.MSELoss()
+    
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=100)
+
+    best_val_de = float('inf')
     patience_counter = 0
     
+    print(f"🧠 Hedef: Train Loss'u dibe indirmek!")
+    
     for epoch in range(Config.EPOCHS):
-        # --- TRAIN ---
+        # TRAIN
         model.train()
         train_loss = 0
         for bx, by in train_loader:
@@ -190,80 +183,53 @@ def main():
         
         avg_train_loss = train_loss / len(train_loader)
         
-        # --- VALIDATION ---
+        # VAL
         model.eval()
         val_loss = 0
-        all_preds = []
-        all_targets = []
+        all_preds, all_targets = [], []
         
         with torch.no_grad():
             for bx, by in val_loader:
                 bx, by = bx.to(device), by.to(device)
                 pred = model(bx)
-                loss = criterion(pred, by)
-                val_loss += loss.item()
-                
-                # İstatistik için sakla
+                val_loss += criterion(pred, by).item()
                 all_preds.append(pred.cpu().numpy())
                 all_targets.append(by.cpu().numpy())
         
         avg_val_loss = val_loss / len(val_loader)
-        
-        # Scheduler Adımı
         scheduler.step(avg_val_loss)
         
-        # Delta E Hesaplama (Gerçek Skaladan)
-        val_preds_scaled = np.vstack(all_preds)
-        val_targets_scaled = np.vstack(all_targets)
-        
-        val_preds_real = y_scaler.inverse_transform(val_preds_scaled)
-        val_targets_real = y_scaler.inverse_transform(val_targets_scaled)
-        
+        # Delta E (Gerçek Skalada)
+        val_preds_real = y_scaler.inverse_transform(np.vstack(all_preds))
+        val_targets_real = y_scaler.inverse_transform(np.vstack(all_targets))
         current_delta_e = calculate_delta_e_mean(val_targets_real, val_preds_real)
 
-        # Loglama ve Early Stopping
-        if avg_val_loss < best_val_loss:
-            best_val_loss = avg_val_loss
+        # Early Stopping - Delta E'ye göre
+        if current_delta_e < best_val_de:
+            best_val_de = current_delta_e
             patience_counter = 0
-
+            # Scaler'ı da kaydediyoruz
             checkpoint = {
-                    'model_state': model.state_dict(),
-                    'scaler': y_scaler,  # <--- Bunu ekledik!
-                    'input_cols': Config.INPUT_COLS,
-                    'target_cols': Config.TARGET_COLS
-                }
-            torch.save(checkpoint, "pigment_model_bundle_opt37.pt")
-
+                'model_state': model.state_dict(),
+                'scaler': y_scaler,
+                'input_cols': Config.INPUT_COLS,
+                'target_cols': Config.TARGET_COLS
+            }
+            torch.save(checkpoint, "AgresifModel.pt")
             best_msg = "💾 (New Best)"
         else:
             patience_counter += 1
             best_msg = ""
             
         if epoch % 50 == 0:
-            print(f"Ep {epoch:04d} | Train Loss: {avg_train_loss:.5f} | Val Loss: {avg_val_loss:.5f} | ΔE: {current_delta_e:.3f} {best_msg}")
+            print(f"Ep {epoch:04d} | TrLoss: {avg_train_loss:.5f} | ValLoss: {avg_val_loss:.5f} | ΔE: {current_delta_e:.3f} {best_msg}")
             
         if patience_counter >= Config.PATIENCE:
-            print(f"⏹️ Erken durdurma tetiklendi (Epoch {epoch}).")
+            print("⏹️ Sabır taştı, eğitim durduruluyor.")
             break
 
-    print("\n✅ Eğitim Tamamlandı.")
-    print(f"🏆 En iyi Validation Delta E: {current_delta_e:.3f}")
-    
-    # --- SON TEST ---
-    # Kaydedilen en iyi modeli geri yükle
-    model.load_state_dict(torch.load("pigment_model_bundle_opt37.pt", weights_only=False))
-    model.eval()
-    
-    # Örnek Bir Tahmin Göster (İlk Validation Verisi)
-    sample_in = torch.tensor(X_val[:1]).to(device)
-    sample_out_scaled = model(sample_in).detach().cpu().numpy()
-    sample_out_real = y_scaler.inverse_transform(sample_out_scaled)
-    sample_target_real = y_scaler.inverse_transform(y_val[:1])
-    
-    print("\n🔎 Örnek Tahmin (Açı 45 için L,a,b):")
-    # 45 derece indeksleri: 6,7,8 (0'dan başlar: 15L,15a,15b, 25L,25a,25b, 45L...)
-    print(f"Gerçek: {sample_target_real[0, 6:9]}")
-    print(f"Tahmin: {sample_out_real[0, 6:9]}")
+    print(f"\n🏆 En İyi Delta E: {best_val_de:.3f}")
+    print("Tahmin için 'AgresifModel.pt' dosyasını kullanabilirsin.")
 
 if __name__ == "__main__":
     main()
