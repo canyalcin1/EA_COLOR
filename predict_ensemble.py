@@ -38,7 +38,7 @@ class PigmentColorNet(nn.Module):
 
 def main():
     # TEST ETMEK İSTEDİĞİN DOSYA
-    INPUT_CSV = "RS400_Clean.csv" 
+    INPUT_CSV = "eval_dataset_clean.csv" 
     OUTPUT_CSV = "Ensemble_Sonuc_RS.csv"
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     

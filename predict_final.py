@@ -38,7 +38,7 @@ def main():
     MODEL_PATH = "FinalModel.pt"
     # İster eğitim (RS400) ister test (eval_dataset) dosyanı buraya yaz
     INPUT_CSV = "eval_dataset_clean.csv" 
-    OUTPUT_CSV = "Final_Sonuc.csv"
+    OUTPUT_CSV = "Final_Sonuc_1M.csv"
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
     print(f"⚙️ Final Tahmin Başlıyor... ({DEVICE})")
