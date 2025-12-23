@@ -1,4 +1,34 @@
 "# EA_COLOR" 
+
+1. train_production (forward model eğittigimiz kod) 
+2. optimize_model.py (Evrimsel ile Forward model parametre optimizasyonu denemesi)
+3. tune.py (optuna library ile parametre optimizasyonu yaptıgımız kod)
+4. optimizer_engine.py (Tüm Evrimsel Kodlarının Kod blokları)
+5. benchmark.py (GA - DE - PSO arasında seçim yapmamızı saglayan kod)
+6. benchmark_full.py (Seçilen yöntem (DE) üzerinden memetic ile finetune etme (basarısını artırmaya yönelik))
+7. nsga2_engine.py (seçilecek pigment sayısını tahmin etmeye saglayan motor)
+8. run_pareto.py (number of pigment seçtiren kod)
+9. plot_pareto.py (kıyaslamalı number of pigment plotter)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 (renkenv310) C:\Users\TAC7\Desktop\RenkAI>python predict_ensemble.py
 ⚙️ 5 Model ile Ensemble Tahmin Yapılıyor...
 ✅ Model 1 tahmini tamam.
