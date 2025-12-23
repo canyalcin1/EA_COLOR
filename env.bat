@@ -1,12 +1,12 @@
 @echo off
 REM Çalışma klasörüne git
-cd /d C:\Users\TAC7\Desktop\RenkAI
+cd /d D:\DevProje\EA\EA_COLOR
 
 REM Sanal ortamı aktive et
-call renkenv310\Scripts\activate.bat
+call venv\Scripts\activate.bat
 
 REM Proje klasörüne gir
-cd RenkProje
+cd EA\EA_COLOR
 
 REM Komut satırını açık bırak
 cmd

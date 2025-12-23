@@ -12,3 +12,6 @@ __pycache__/
 .DS_Store
 renkenv311/
 .APP
+venv
+venv/
+env/
