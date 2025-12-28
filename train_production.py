@@ -12,22 +12,22 @@ class Config:
     CSV_PATH = "RS400_Clean.csv"
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     
-    # KAZANAN AYARLAR (Ensemble V1)
+    # Optimal hyperparameters from Optuna search
     EMBED_DIM = 92
     HIDDEN_DIM = 511
     DROPOUT = 0.116457
     N_LAYERS = 2
     USE_BATCHNORM = False
-    
+
     LR = 0.001023
     EPOCHS = 2000
     BATCH_SIZE = 32
-    N_SPLITS = 5  # 5 Model
+    N_SPLITS = 5
 
     ANGLES = ['15', '25', '45', '75', '110']
     TARGET_COLS = [f"{ang}{ch}" for ang in ANGLES for ch in ['L', 'a', 'b']]
-    
-    # TEMİZ GİRİŞ LİSTESİ (Sadece Pigmentler)
+
+    # 62 pigment feature columns
     INPUT_COLS = [
         "726C", "718Y", "783S", "772S", "755C", "744S", "717C", "980", "910", "135", 
         "828", "835", "831", "826", "836", "838", "815", "856", "892", "895", "855", 
@@ -56,10 +56,10 @@ class PigmentColorNet(nn.Module):
         return self.net(self.pigment_embedding(x))
 
 def load_data():
-    print(f"📂 Veri Hazırlanıyor: {Config.CSV_PATH}")
+    print(f"Loading data: {Config.CSV_PATH}")
     df = pd.read_csv(Config.CSV_PATH, sep=None, engine='python')
-    
-    # Temizlik
+
+    # Convert comma decimals to dots and handle missing values
     cols = Config.INPUT_COLS + Config.TARGET_COLS
     for c in cols:
         if c in df.columns and df[c].dtype == object:
@@ -67,13 +67,13 @@ def load_data():
     
     df[Config.INPUT_COLS] = df[Config.INPUT_COLS].fillna(0.0)
     df = df.dropna(subset=Config.TARGET_COLS).reset_index(drop=True)
-    
-    # Tekilleştirme
+
+    # Remove duplicate recipes by averaging
     df['sig'] = df[Config.INPUT_COLS].apply(lambda r: '_'.join(r.values.round(4).astype(str)), axis=1)
     df = df.groupby('sig', as_index=False).mean(numeric_only=True).drop(columns=['sig'], errors='ignore')
     
     X = df[Config.INPUT_COLS].values.astype(np.float32)
-    # Row Normalization (Ham Ağırlık - En İyi Sonuç)
+    # Normalize each row to sum to 1.0
     row_sums = X.sum(axis=1, keepdims=True)
     row_sums[row_sums==0] = 1.0
     X = X/row_sums
@@ -86,10 +86,10 @@ def main():
     X, y = load_data()
     
     kf = KFold(n_splits=Config.N_SPLITS, shuffle=True, random_state=42)
-    print(f"🚀 PRODUCTION TRAINING ({Config.N_SPLITS} Models)...")
-    
+    print(f"Training {Config.N_SPLITS}-fold ensemble...")
+
     for fold, (train_idx, val_idx) in enumerate(kf.split(X)):
-        print(f"\n--- 🏭 FOLD {fold+1} ---")
+        print(f"\n--- Fold {fold+1}/{Config.N_SPLITS} ---")
         
         y_scaler = StandardScaler()
         y_train_scaled = y_scaler.fit_transform(y[train_idx])
@@ -99,12 +99,10 @@ def main():
         val_ds = TensorDataset(torch.tensor(X[val_idx]), torch.tensor(y_val_scaled))
         
         train_loader = DataLoader(train_ds, batch_size=Config.BATCH_SIZE, shuffle=True)
-        # Hızlı validation
-        val_loader = DataLoader(val_ds, batch_size=Config.BATCH_SIZE*4, shuffle=False)
-        
+        val_loader = DataLoader(val_ds, batch_size=Config.BATCH_SIZE*4, shuffle=False)  # Larger batch for faster validation
+
         model = PigmentColorNet(X.shape[1], y.shape[1]).to(Config.DEVICE)
         optimizer = optim.AdamW(model.parameters(), lr=Config.LR, weight_decay=1e-5)
-        # Standart MSE (Kazanan Loss)
         criterion = nn.MSELoss()
         
         best_val_loss = float('inf')
@@ -119,7 +117,7 @@ def main():
                 loss.backward()
                 optimizer.step()
             
-            if epoch % 10 == 0: # Sık kontrol
+            if epoch % 10 == 0:  # Validate every 10 epochs
                 model.eval()
                 val_loss = 0
                 with torch.no_grad():
@@ -133,7 +131,7 @@ def main():
                     patience = 0
                     torch.save({
                         'model_state': model.state_dict(),
-                        'scaler': y_scaler, # Scaler önemli
+                        'scaler': y_scaler,  # Save scaler for inverse transform during inference
                         'config': {
                             'EMBED_DIM': Config.EMBED_DIM, 'HIDDEN_DIM': Config.HIDDEN_DIM,
                             'N_LAYERS': Config.N_LAYERS, 'USE_BATCHNORM': Config.USE_BATCHNORM,
@@ -145,11 +143,11 @@ def main():
                 else:
                     patience += 1
                 
-                if patience >= 50: # 500 epoch boyunca iyileşme yoksa dur
-                    print(f"⏹️ Erken Durdurma (Ep {epoch}) - Best: {best_val_loss:.5f}")
+                if patience >= 50:  # Stop if no improvement for 500 epochs (50*10)
+                    print(f"Early stopping at epoch {epoch} - Best loss: {best_val_loss:.5f}")
                     break
-                    
-        print(f"✅ Model {fold+1} Hazır.")
+
+        print(f"Model {fold+1} completed.")
 
 if __name__ == "__main__":
     main()

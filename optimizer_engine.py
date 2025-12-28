@@ -10,14 +10,14 @@ class EvolutionaryOptimizer:
         self.target_lab = torch.tensor(target_lab, device=self.device, dtype=torch.float32)
         self.input_cols = input_cols
         self.target_cols = target_cols
-        
-        # Modelleri yükle
+
+        # Load ensemble models
         self.models = self.load_ensemble_models()
-        
-        # Varsayılan Ayarlar
+
+        # Default settings
         self.POP_SIZE = 100
         self.sparsity_limit = 8
-        self.penalty_weight = 1.5 # <--- Yeni bir değişken (Ceza katsayısı düşürüldü)
+        self.penalty_weight = 1.5  # Penalty coefficient for exceeding pigment limit
         self.global_mask = torch.ones(len(input_cols), device=self.device, dtype=torch.bool)
 
     def load_ensemble_models(self):
@@ -27,8 +27,8 @@ class EvolutionaryOptimizer:
         loaded_models = []
         chk0 = torch.load(model_files[0], map_location=self.device, weights_only=False)
         config = chk0['config']
-        
-        # --- MODEL SINIFI ---
+
+        # Model class definition
         class PigmentColorNet(nn.Module):
             def __init__(self, num_pigments, out_dim, cfg):
                 super().__init__()
@@ -69,11 +69,11 @@ class EvolutionaryOptimizer:
 
     def predict_batch(self, population_tensor):
         """
-        DİKKAT: Burada 'no_grad' OLMAZ! Çünkü Fine-Tune işlemi gradient istiyor.
+        NOTE: No 'no_grad' here - fine-tuning requires gradients.
         """
         total_preds = torch.zeros((population_tensor.shape[0], len(self.target_cols)), device=self.device)
-        
-        # Döngü içinde gradient takibi açık kalmalı (Fine-tune için)
+
+        # Keep gradient tracking enabled for fine-tuning
         for model, s_mean, s_scale in self.models:
             pred_scaled = model(population_tensor)
             pred_real = (pred_scaled * s_scale) + s_mean
@@ -86,23 +86,20 @@ class EvolutionaryOptimizer:
             preds = self.predict_batch(population)
             diff = preds.view(-1, 5, 3) - self.target_lab.view(1, 5, 3)
             delta_e = torch.sqrt(torch.sum(diff**2, dim=2)).mean(dim=1)
-            
-            # CEZA MEKANİZMASI GÜNCELLEMESİ
-            # Count > 0.001 olanları say
+
+            # Penalty mechanism
+            # Count pigments with concentration > 0.001
             active_counts = (population > 0.001).sum(dim=1).float()
-            
-            # Eğer limit (8) aşılırsa her fazla pigment için sadece 1.5 puan ceza ver (Eskiden 10'du)
-            # Bu sayede algoritma "Delta E'yi 5 puan düşürecekse 1 pigment fazla kullanayım" diyebilecek.
+
+            # Penalty of 1.5 per pigment exceeding the limit
             penalty = torch.relu(active_counts - self.sparsity_limit) * self.penalty_weight
         
         return delta_e + penalty, delta_e
 
     def enforce_constraints(self, pop):
-        # Eğer tensor gradient gerektiriyorsa (Fine-tune sırasında), işlem yaparken dikkat etmeliyiz
-        # Ancak burada genellikle detach edilmiş veriyle çalışacağız.
+        # If tensor requires gradients (during fine-tuning), handle carefully
+        # Fine-tuning has manual constraints to preserve gradient flow
         if pop.requires_grad:
-            # Gradient akışını bozmadan işlem yapmak zor, o yüzden fine-tune içinde manuel constraint var.
-            # Bu fonksiyon sadece GA/DE için.
             pop = pop.detach()
 
         pop = pop * self.global_mask.view(1, -1)
@@ -206,18 +203,17 @@ class EvolutionaryOptimizer:
         
         return new_pop, self.gbest, self.gbest_score
 
-    # --- MEMETIC STEP: FINE TUNING (İNCE AYAR) ---
+    # Memetic step: gradient-based fine-tuning
     def fine_tune(self, best_recipe, steps=100, lr=0.01):
         """
-        Gradient Descent ile son dokunuş.
+        Local refinement using gradient descent.
         """
-        # Reçeteyi türev alınabilir hale getir
-        # (Clone ve Detach önemli, graph'ı koparıp yeni bir tane başlatıyoruz)
+        # Make recipe differentiable
         optimized_recipe = best_recipe.clone().detach().requires_grad_(True)
-        
+
         optimizer = torch.optim.Adam([optimized_recipe], lr=lr)
-        
-        # Kullanılmayan pigmentleri baskılamak için maske
+
+        # Mask to suppress inactive pigments
         with torch.no_grad():
             zero_mask = (best_recipe <= 0.001)
         
@@ -225,34 +221,34 @@ class EvolutionaryOptimizer:
         
         for i in range(steps):
             optimizer.zero_grad()
-            
-            # 1. Tahmin (Artık gradient takibi AÇIK)
+
+            # 1. Predict with gradient tracking enabled
             preds = self.predict_batch(optimized_recipe.unsqueeze(0))
-            
+
             # 2. Loss: Delta E
             diff = preds.view(-1, 5, 3) - self.target_lab.view(1, 5, 3)
             loss = torch.sqrt(torch.sum(diff**2, dim=2)).mean()
-            
-            # 3. Loss: Sparsity Koruması (Sıfır olanları elleme cezası)
-            # Eğer model sıfır olması gereken bir pigmenti artırırsa ceza ver
+
+            # 3. Sparsity preservation penalty
+            # Penalize any increase in inactive pigments
             loss += torch.sum(torch.abs(optimized_recipe) * zero_mask) * 1000.0
-            
+
             loss.backward()
             optimizer.step()
-            
-            # Constraintleri manuel uygula (Gradienti bozmadan data üzerinde)
+
+            # Enforce constraints manually without breaking gradients
             with torch.no_grad():
-                # Negatifleri sil
+                # Remove negative values
                 optimized_recipe.data = torch.relu(optimized_recipe.data)
-                # Yasaklıları sıfırla
+                # Zero out inactive pigments
                 optimized_recipe.data[zero_mask] = 0.0
-                # Toplamı 1 yap (Renormalizasyon)
+                # Renormalize to sum to 1.0
                 s = optimized_recipe.data.sum()
                 if s > 1e-6: optimized_recipe.data /= s
-            
+
             history.append(loss.item())
-            
-            if loss.item() < 0.1: # Hedefe ulaştık
+
+            if loss.item() < 0.1:  # Target reached
                 break
                 
         return optimized_recipe.detach(), loss.item()
